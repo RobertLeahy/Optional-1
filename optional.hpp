@@ -178,6 +178,17 @@ template <class T> class optional;
 template <class T> class optional<T&>;
 
 
+#if defined NDEBUG
+# define TR2_OPTIONAL_ASSERTED_EXPRESSION(CHECK, EXPR) (EXPR)
+#else
+# define TR2_OPTIONAL_ASSERTED_EXPRESSION(CHECK, EXPR) ((CHECK) ? (EXPR) : ([]{assert(!#CHECK);}(), (EXPR)))
+#endif
+
+
+namespace detail_
+{
+
+
 // workaround: std utility functions aren't constexpr yet
 template <class T> inline constexpr T&& constexpr_forward(typename std::remove_reference<T>::type& t) noexcept
 {
@@ -195,16 +206,6 @@ template <class T> inline constexpr typename std::remove_reference<T>::type&& co
     return static_cast<typename std::remove_reference<T>::type&&>(t);
 }
 
-
-#if defined NDEBUG
-# define TR2_OPTIONAL_ASSERTED_EXPRESSION(CHECK, EXPR) (EXPR)
-#else
-# define TR2_OPTIONAL_ASSERTED_EXPRESSION(CHECK, EXPR) ((CHECK) ? (EXPR) : ([]{assert(!#CHECK);}(), (EXPR)))
-#endif
-
-
-namespace detail_
-{
 
 // static_addressof: a constexpr version of addressof
 template <typename T>
@@ -272,7 +273,7 @@ union storage_t
   constexpr storage_t( trivial_init_t ) noexcept : dummy_() {};
 
   template <class... Args>
-  constexpr storage_t( Args&&... args ) : value_(constexpr_forward<Args>(args)...) {}
+  constexpr storage_t( Args&&... args ) : value_(detail_::constexpr_forward<Args>(args)...) {}
 
   ~storage_t(){}
 };
@@ -287,7 +288,7 @@ union constexpr_storage_t
     constexpr constexpr_storage_t( trivial_init_t ) noexcept : dummy_() {};
 
     template <class... Args>
-    constexpr constexpr_storage_t( Args&&... args ) : value_(constexpr_forward<Args>(args)...) {}
+    constexpr constexpr_storage_t( Args&&... args ) : value_(detail_::constexpr_forward<Args>(args)...) {}
 
     ~constexpr_storage_t() = default;
 };
@@ -303,10 +304,10 @@ struct optional_base
 
     explicit constexpr optional_base(const T& v) : init_(true), storage_(v) {}
 
-    explicit constexpr optional_base(T&& v) : init_(true), storage_(constexpr_move(v)) {}
+    explicit constexpr optional_base(T&& v) : init_(true), storage_(detail_::constexpr_move(v)) {}
 
     template <class... Args> explicit optional_base(in_place_t, Args&&... args)
-        : init_(true), storage_(constexpr_forward<Args>(args)...) {}
+        : init_(true), storage_(detail_::constexpr_forward<Args>(args)...) {}
 
     template <class U, class... Args, TR2_OPTIONAL_REQUIRES(is_constructible<T, std::initializer_list<U>>)>
     explicit optional_base(in_place_t, std::initializer_list<U> il, Args&&... args)
@@ -326,10 +327,10 @@ struct constexpr_optional_base
 
     explicit constexpr constexpr_optional_base(const T& v) : init_(true), storage_(v) {}
 
-    explicit constexpr constexpr_optional_base(T&& v) : init_(true), storage_(constexpr_move(v)) {}
+    explicit constexpr constexpr_optional_base(T&& v) : init_(true), storage_(detail_::constexpr_move(v)) {}
 
     template <class... Args> explicit constexpr constexpr_optional_base(in_place_t, Args&&... args)
-      : init_(true), storage_(constexpr_forward<Args>(args)...) {}
+      : init_(true), storage_(detail_::constexpr_forward<Args>(args)...) {}
 
     template <class U, class... Args, TR2_OPTIONAL_REQUIRES(is_constructible<T, std::initializer_list<U>>)>
     OPTIONAL_CONSTEXPR_INIT_LIST explicit constexpr_optional_base(in_place_t, std::initializer_list<U> il, Args&&... args)
@@ -420,15 +421,15 @@ public:
 
   constexpr optional(const T& v) : OptionalBase<T>(v) {}
 
-  constexpr optional(T&& v) : OptionalBase<T>(constexpr_move(v)) {}
+  constexpr optional(T&& v) : OptionalBase<T>(detail_::constexpr_move(v)) {}
 
   template <class... Args>
   explicit constexpr optional(in_place_t, Args&&... args)
-  : OptionalBase<T>(in_place_t{}, constexpr_forward<Args>(args)...) {}
+  : OptionalBase<T>(in_place_t{}, detail_::constexpr_forward<Args>(args)...) {}
 
   template <class U, class... Args, TR2_OPTIONAL_REQUIRES(is_constructible<T, std::initializer_list<U>>)>
   OPTIONAL_CONSTEXPR_INIT_LIST explicit optional(in_place_t, std::initializer_list<U> il, Args&&... args)
-  : OptionalBase<T>(in_place_t{}, il, constexpr_forward<Args>(args)...) {}
+  : OptionalBase<T>(in_place_t{}, il, detail_::constexpr_forward<Args>(args)...) {}
 
   // 20.5.4.2, Destructor
   ~optional() = default;
@@ -520,7 +521,7 @@ public:
   
   OPTIONAL_MUTABLE_CONSTEXPR T&& operator *() && {
     assert (initialized());
-    return constexpr_move(contained_val());
+    return detail_::constexpr_move(contained_val());
   }
 
   constexpr T const& value() const& {
@@ -567,7 +568,7 @@ public:
   template <class V>
   constexpr T value_or(V&& v) const&
   {
-    return *this ? **this : detail_::convert<T>(constexpr_forward<V>(v));
+    return *this ? **this : detail_::convert<T>(detail_::constexpr_forward<V>(v));
   }
   
 #   if OPTIONAL_HAS_MOVE_ACCESSORS == 1
@@ -575,7 +576,7 @@ public:
   template <class V>
   OPTIONAL_MUTABLE_CONSTEXPR T value_or(V&& v) &&
   {
-    return *this ? constexpr_move(const_cast<optional<T>&>(*this).contained_val()) : detail_::convert<T>(constexpr_forward<V>(v));
+    return *this ? detail_::constexpr_move(const_cast<optional<T>&>(*this).contained_val()) : detail_::convert<T>(detail_::constexpr_forward<V>(v));
   }
 
 #   else
@@ -583,7 +584,7 @@ public:
   template <class V>
   T value_or(V&& v) &&
   {
-    return *this ? constexpr_move(const_cast<optional<T>&>(*this).contained_val()) : detail_::convert<T>(constexpr_forward<V>(v));
+    return *this ? detail_::constexpr_move(const_cast<optional<T>&>(*this).contained_val()) : detail_::convert<T>(detail_::constexpr_forward<V>(v));
   }
   
 #   endif
@@ -593,7 +594,7 @@ public:
   template <class V>
   constexpr T value_or(V&& v) const
   {
-    return *this ? **this : detail_::convert<T>(constexpr_forward<V>(v));
+    return *this ? **this : detail_::convert<T>(detail_::constexpr_forward<V>(v));
   }
 
 # endif
@@ -702,7 +703,7 @@ public:
   template <class V>
   constexpr typename decay<T>::type value_or(V&& v) const
   {
-    return *this ? **this : detail_::convert<typename decay<T>::type>(constexpr_forward<V>(v));
+    return *this ? **this : detail_::convert<typename decay<T>::type>(detail_::constexpr_forward<V>(v));
   }
 
   // x.x.x.x, modifiers
@@ -1008,7 +1009,7 @@ void swap(optional<T>& x, optional<T>& y) noexcept(noexcept(x.swap(y)))
 template <class T>
 constexpr optional<typename decay<T>::type> make_optional(T&& v)
 {
-  return optional<typename decay<T>::type>(constexpr_forward<T>(v));
+  return optional<typename decay<T>::type>(detail_::constexpr_forward<T>(v));
 }
 
 template <class X>
